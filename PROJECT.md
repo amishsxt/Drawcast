@@ -133,11 +133,19 @@ Both:       onIceCandidate → sendIceCandidate to Firebase
 - [x] Firebase Realtime DB rules configured
 - Goal: two phones connected, no video yet ✅
 
-**Week 2 — Video Call**
-- Camera capture on Phone B (`startCamera` in WebRTCManager)
-- Remote video rendering on Phone A via `SurfaceViewRenderer`
-- Data channel — send a "Hello" and verify latency
-- Goal: live video working across different networks (STUN)
+**Week 2 — Video Call ✅**
+- [x] Runtime camera permission request in `CallScreen` / `CallViewModel`
+- [x] Camera capture on Phone B — `startCamera()` in `WebRTCManager` using `Camera2Enumerator`, `VideoSource`, `VideoTrack`
+- [x] Wire `onTrack` in `PeerConnection.Observer` to expose incoming remote `VideoTrack`
+- [x] Remote video rendering on Phone A — `SurfaceViewRenderer` as `AndroidView` in `CallScreen`, initialized with shared `EglBase`
+- [x] Data channel smoke test — send `"ping"`, verify receipt on other device
+- Goal: live video working across different networks via STUN ✅
+
+**Week 2 — Implementation Notes**
+- `EglBase` is shared from `WebRTCManager.eglBase` — never create a second instance or rendering glitches occur
+- Use `onTrack` (Unified Plan), not the deprecated `onAddStream`
+- `SurfaceViewRenderer` must be initialized before the remote track arrives; release in `onDispose`
+- Camera + PeerConnection callbacks run on different threads — use `WebRTCManager`'s existing executor pattern
 
 **Week 3 — Annotation Engine**
 - `AnnotationOverlayView` with Canvas

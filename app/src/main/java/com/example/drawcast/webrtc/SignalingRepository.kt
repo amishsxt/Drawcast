@@ -38,7 +38,7 @@ class SignalingRepository {
                 val sdp = snapshot.child("sdp").getValue(String::class.java)
                 if (sdp != null) trySend(sdp)
             }
-            override fun onCancelled(error: DatabaseError) = close(error.toException())
+            override fun onCancelled(error: DatabaseError) { close(error.toException()) }
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
@@ -52,7 +52,7 @@ class SignalingRepository {
                 val sdp = snapshot.child("sdp").getValue(String::class.java)
                 if (sdp != null) trySend(sdp)
             }
-            override fun onCancelled(error: DatabaseError) = close(error.toException())
+            override fun onCancelled(error: DatabaseError) { close(error.toException()) }
         }
         ref.addValueEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
@@ -70,7 +70,7 @@ class SignalingRepository {
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-            override fun onCancelled(error: DatabaseError) = close(error.toException())
+            override fun onCancelled(error: DatabaseError) { close(error.toException()) }
         }
         ref.addChildEventListener(listener)
         awaitClose { ref.removeEventListener(listener) }
