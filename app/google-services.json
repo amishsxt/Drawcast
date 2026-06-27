@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "54268247049",
+    "firebase_url": "https://drawcast-a8a57-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "drawcast-a8a57",
+    "storage_bucket": "drawcast-a8a57.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:54268247049:android:1966f516be27766b4e0cd8",
+        "android_client_info": {
+          "package_name": "com.amishsxt.drawcast"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBriu6toYMMaXqvhkU8LzpDHYXJemQI48M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

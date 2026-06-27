@@ -1,4 +1,4 @@
-package com.example.drawcast.data
+package com.amishsxt.drawcast.data
 
 class FirebaseRepository {
 

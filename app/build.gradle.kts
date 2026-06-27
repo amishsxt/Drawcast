@@ -2,14 +2,15 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
 android {
-    namespace = "com.example.drawcast"
+    namespace = "com.amishsxt.drawcast"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.drawcast"
+        applicationId = "com.amishsxt.drawcast"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -59,6 +60,13 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    //fonts
+    // Fonts
     implementation("androidx.compose.ui:ui-text-google-fonts:1.7.0")
+
+    // Firebase
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.database)
+
+    // WebRTC
+    implementation(libs.stream.webrtc)
 }

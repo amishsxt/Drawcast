@@ -1,11 +1,11 @@
-package com.example.drawcast.ui.call
+package com.amishsxt.drawcast.ui.call
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.drawcast.annotation.models.Annotation
-import com.example.drawcast.webrtc.SignalingRepository
-import com.example.drawcast.webrtc.WebRTCManager
+import com.amishsxt.drawcast.annotation.models.Annotation
+import com.amishsxt.drawcast.webrtc.SignalingRepository
+import com.amishsxt.drawcast.webrtc.WebRTCManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

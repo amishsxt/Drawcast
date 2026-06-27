@@ -1,4 +1,4 @@
-package com.example.drawcast.webrtc
+package com.amishsxt.drawcast.webrtc
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow

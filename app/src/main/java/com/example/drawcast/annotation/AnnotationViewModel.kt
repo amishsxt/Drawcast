@@ -1,7 +1,7 @@
-package com.example.drawcast.annotation
+package com.amishsxt.drawcast.annotation
 
 import androidx.lifecycle.ViewModel
-import com.example.drawcast.annotation.models.Annotation
+import com.amishsxt.drawcast.annotation.models.Annotation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
