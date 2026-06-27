@@ -1,5 +1,9 @@
 package com.amishsxt.drawcast.ui.call
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,11 +27,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,8 +43,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val BgColor = Color(0xFF121212)
@@ -54,7 +63,72 @@ fun CallScreen(
     onClose: () -> Unit,
     viewModel: CallViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var selectedTool by remember { mutableStateOf("pencil") }
+    var permissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var permissionDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            permissionGranted = true
+        } else {
+            permissionDenied = true
+        }
+    }
+
+    // Request on first entry if not already granted
+    LaunchedEffect(Unit) {
+        if (!permissionGranted) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Init WebRTC once permission is confirmed
+    LaunchedEffect(permissionGranted) {
+        if (permissionGranted) {
+            viewModel.init(context, roomId, isExpert)
+        }
+    }
+
+    // Permission denied wall
+    if (permissionDenied) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = Color(0xFF555555),
+                    modifier = Modifier.size(56.dp)
+                )
+                Text(
+                    text = "Camera permission is required to start a call.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Text("Grant Permission")
+                }
+            }
+        }
+        return
+    }
 
     Box(
         modifier = Modifier
