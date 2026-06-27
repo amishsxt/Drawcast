@@ -4,7 +4,7 @@
     <style name="Theme.Drawcast" parent="android:Theme.Material.Light.NoActionBar" />
 
     <style name="Theme.Drawcast.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#FFF8F6</item>
+        <item name="windowSplashScreenBackground">#121212</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.Drawcast</item>
     </style>
