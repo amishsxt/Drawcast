@@ -25,7 +25,7 @@ Show Annotations ◄─ WebRTC Data Channel ─ Draw Annotations
 | Language | Kotlin | Modern, no limitations for this use case |
 | UI | Jetpack Compose | Clean, modern |
 | Rendering | Canvas over TextureView | 2D overlays, simpler than OpenGL |
-| Real-time video | Google's official WebRTC | Better internals knowledge |
+| Real-time video | Stream WebRTC (Google's WebRTC compiled) | Actively maintained, same API |
 | Signaling | Firebase Realtime DB | Free, fast, minimal setup |
 | STUN | Google's free STUN server | Works across different networks |
 | Architecture | MVVM + Coroutines + Flow | Clean separation |
@@ -38,19 +38,30 @@ Show Annotations ◄─ WebRTC Data Channel ─ Draw Annotations
 ```
 app/
 ├── webrtc/
-│   ├── WebRTCManager.kt
-│   └── SignalingRepository.kt
+│   ├── WebRTCManager.kt          ← PeerConnection, data channel, ICE
+│   ├── SignalingRepository.kt    ← Firebase offer/answer/ICE flows
+│   └── IceCandidateModel.kt      ← Firebase-serializable ICE data class
 ├── annotation/
-│   ├── AnnotationOverlayView.kt    ← Canvas drawing
+│   ├── AnnotationOverlayView.kt  ← Canvas drawing (Week 3)
 │   ├── AnnotationViewModel.kt
 │   └── models/
-│       ├── Annotation.kt           ← sealed class
-│       └── DataMessage.kt          ← sealed class
+│       ├── Annotation.kt         ← sealed class: FreeDraw, Arrow, Circle
+│       └── DataMessage.kt        ← sealed class: Added, Undone, ClearAll
 ├── ui/
-│   ├── home/                       ← Create/Join room
-│   └── call/                       ← Active session screen
+│   ├── home/
+│   │   ├── HomeScreen.kt         ← Create/Join room UI
+│   │   └── HomeViewModel.kt
+│   └── call/
+│       ├── CallScreen.kt         ← Active session (video + overlay)
+│       └── CallViewModel.kt      ← Orchestrates WebRTC + signaling
+├── screens/
+│   ├── SplashScreen.kt
+│   ├── MainScreen.kt             ← Bottom nav (Home, History, Profile)
+│   ├── HomeScreen.kt
+│   ├── HistoryScreen.kt
+│   └── ProfileScreen.kt
 └── data/
-    └── FirebaseRepository.kt
+    └── FirebaseRepository.kt     ← Room existence, 6-digit code generator
 ```
 
 ---
@@ -66,8 +77,8 @@ sealed class Annotation {
         val color: Int,
         val width: Float
     ) : Annotation()
-    data class Arrow(val start: PointF, val end: PointF) : Annotation()
-    data class Circle(val center: PointF, val radius: Float) : Annotation()
+    data class Arrow(val id: String, val start: PointF, val end: PointF) : Annotation()
+    data class Circle(val id: String, val center: PointF, val radius: Float) : Annotation()
 }
 ```
 
@@ -89,21 +100,43 @@ val iceServers = listOf(
 )
 ```
 
+**Firebase DB structure**
+```
+rooms/
+└── {roomId}/
+    ├── offer/              { sdp: "..." }
+    ├── answer/             { sdp: "..." }
+    ├── offerCandidates/    { id: { candidate, sdpMid, sdpMLineIndex } }
+    └── answerCandidates/   { id: { candidate, sdpMid, sdpMLineIndex } }
+```
+
+**Signaling flow**
+```
+Expert:     createRoom → createOffer → sendOffer → observeAnswer
+               → setRemoteDescription → observeRemoteICE
+Field User: observeOffer → createAnswer → sendAnswer → startCamera
+               → observeRemoteICE
+Both:       onIceCandidate → sendIceCandidate to Firebase
+```
+
 ---
 
 ## 📅 4-Week Build Plan
 
-**Week 1 — Foundation**
-- Firebase project setup
-- WebRTC dependency (Google's official)
-- MVVM skeleton
-- Signaling: create room → offer → answer → ICE
-- Goal: two phones connected, no video yet
+**Week 1 — Foundation ✅**
+- [x] Firebase project setup + `google-services.json`
+- [x] Stream WebRTC dependency added
+- [x] MVVM skeleton (ViewModel, Repository, sealed states)
+- [x] `SignalingRepository` — offer/answer/ICE via Firebase Flows
+- [x] `WebRTCManager` — PeerConnection, data channel, STUN, ICE
+- [x] `CallViewModel` — full signaling orchestration
+- [x] Firebase Realtime DB rules configured
+- Goal: two phones connected, no video yet ✅
 
 **Week 2 — Video Call**
-- Camera capture on Phone B
+- Camera capture on Phone B (`startCamera` in WebRTCManager)
 - Remote video rendering on Phone A via `SurfaceViewRenderer`
-- Data channel setup — send a simple "Hello" and verify latency
+- Data channel — send a "Hello" and verify latency
 - Goal: live video working across different networks (STUN)
 
 **Week 3 — Annotation Engine**
@@ -145,12 +178,3 @@ Real-Time AR Annotation App                         GitHub ↗
 • Stack: Kotlin, Jetpack Compose, WebRTC, Canvas, Firebase,
   MVVM, Coroutines, Flow
 ```
-
----
-
-## ✅ Start Here — Right Now
-
-1. Create a new Android project (Kotlin + Compose)
-2. Set up Firebase at `console.firebase.google.com`
-3. Add Google's WebRTC dependency
-4. Build the signaling flow first — everything else depends on it

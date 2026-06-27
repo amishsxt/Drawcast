@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amishsxt.drawcast.annotation.models.Annotation
+import com.amishsxt.drawcast.webrtc.IceCandidateModel
 import com.amishsxt.drawcast.webrtc.SignalingRepository
 import com.amishsxt.drawcast.webrtc.WebRTCManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,54 +20,75 @@ class CallViewModel : ViewModel() {
     private val _annotations = MutableStateFlow<List<Annotation>>(emptyList())
     val annotations: StateFlow<List<Annotation>> = _annotations.asStateFlow()
 
+    private val _uiState = MutableStateFlow<CallUiState>(CallUiState.Idle)
+    val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
+
     val connectionState get() = webRTCManager.connectionState
 
     fun init(context: Context, roomId: String, isExpert: Boolean) {
         webRTCManager = WebRTCManager(context)
         webRTCManager.initPeerConnection()
 
-        if (isExpert) {
-            startAsExpert(roomId)
-        } else {
-            startAsFieldUser(roomId)
+        // Forward ICE candidates gathered locally to Firebase
+        webRTCManager.onIceCandidate = { candidate ->
+            signalingRepository.sendIceCandidate(roomId, isOffer = isExpert, candidate)
         }
+
+        // Forward incoming data channel messages to annotation state
+        webRTCManager.onDataChannelMessage = { json ->
+            // TODO: Week 3 — deserialize JSON → Annotation and add to list
+        }
+
+        if (isExpert) startAsExpert(roomId) else startAsFieldUser(roomId)
     }
 
+    // ── Expert (Phone A) ──────────────────────────────────────────────────
+    // Creates room → sends offer → waits for answer → streams remote ICE
     private fun startAsExpert(roomId: String) {
+        signalingRepository.createRoom(roomId)
+
         webRTCManager.createOffer { sdp ->
             signalingRepository.sendOffer(roomId, sdp)
         }
+
         viewModelScope.launch {
             signalingRepository.observeAnswer(roomId).collect { sdp ->
                 webRTCManager.setRemoteDescription(sdp)
+                _uiState.value = CallUiState.Connected(roomId)
             }
         }
-        observeIceCandidates(roomId)
+
+        observeRemoteIceCandidates(roomId, fromOffer = false)
     }
 
+    // ── Field User (Phone B) ──────────────────────────────────────────────
+    // Waits for offer → sends answer → starts camera → streams remote ICE
     private fun startAsFieldUser(roomId: String) {
         viewModelScope.launch {
             signalingRepository.observeOffer(roomId).collect { sdp ->
                 webRTCManager.createAnswer(sdp) { answer ->
                     signalingRepository.sendAnswer(roomId, answer)
+                    _uiState.value = CallUiState.Connected(roomId)
                 }
             }
         }
-        observeIceCandidates(roomId)
+
         webRTCManager.startCamera()
+        observeRemoteIceCandidates(roomId, fromOffer = true)
     }
 
-    private fun observeIceCandidates(roomId: String) {
+    // ── Shared ────────────────────────────────────────────────────────────
+    private fun observeRemoteIceCandidates(roomId: String, fromOffer: Boolean) {
         viewModelScope.launch {
-            signalingRepository.observeIceCandidates(roomId).collect { candidate ->
-                webRTCManager.addIceCandidate(candidate)
+            signalingRepository.observeIceCandidates(roomId, fromOffer).collect { model ->
+                webRTCManager.addIceCandidate(model)
             }
         }
     }
 
     fun sendAnnotation(annotation: Annotation) {
-        // TODO: serialize annotation to JSON and send via data channel
         _annotations.value = _annotations.value + annotation
+        // TODO: Week 3 — serialize to JSON and send via webRTCManager.sendMessage()
     }
 
     fun undoLast() {
@@ -82,6 +104,12 @@ class CallViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
-        webRTCManager.release()
+        if (::webRTCManager.isInitialized) webRTCManager.release()
     }
+}
+
+sealed class CallUiState {
+    object Idle : CallUiState()
+    data class Connected(val roomId: String) : CallUiState()
+    data class Error(val message: String) : CallUiState()
 }
