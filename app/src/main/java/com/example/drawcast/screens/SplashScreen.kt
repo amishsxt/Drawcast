@@ -1,4 +1,4 @@
-package com.example.drawcast.screens
+package com.amishsxt.drawcast.screens
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween

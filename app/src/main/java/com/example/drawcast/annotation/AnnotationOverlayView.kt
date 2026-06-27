@@ -1,11 +1,11 @@
-package com.example.drawcast.annotation
+package com.amishsxt.drawcast.annotation
 
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
-import com.example.drawcast.annotation.models.Annotation
+import com.amishsxt.drawcast.annotation.models.Annotation
 
 class AnnotationOverlayView @JvmOverloads constructor(
     context: Context,

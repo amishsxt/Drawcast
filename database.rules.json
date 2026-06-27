@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": true,
+        ".write": true,
+        "offer": {
+          ".validate": "newData.hasChildren(['sdp'])"
+        },
+        "answer": {
+          ".validate": "newData.hasChildren(['sdp'])"
+        },
+        "offerCandidates": {
+          "$candidateId": {
+            ".validate": "newData.hasChildren(['candidate', 'sdpMid', 'sdpMLineIndex'])"
+          }
+        },
+        "answerCandidates": {
+          "$candidateId": {
+            ".validate": "newData.hasChildren(['candidate', 'sdpMid', 'sdpMLineIndex'])"
+          }
+        }
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs sed -i 's/com\\\\.example\\\\.drawcast/com.amishsxt.drawcast/g')"
+    ]
+  }
+}

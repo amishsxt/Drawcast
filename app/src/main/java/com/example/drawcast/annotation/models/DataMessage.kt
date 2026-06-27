@@ -1,4 +1,4 @@
-package com.example.drawcast.annotation.models
+package com.amishsxt.drawcast.annotation.models
 
 sealed class DataMessage {
     data class AnnotationAdded(val annotation: Annotation) : DataMessage()

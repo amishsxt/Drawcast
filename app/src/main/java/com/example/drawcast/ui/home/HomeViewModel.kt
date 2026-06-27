@@ -1,7 +1,7 @@
-package com.example.drawcast.ui.home
+package com.amishsxt.drawcast.ui.home
 
 import androidx.lifecycle.ViewModel
-import com.example.drawcast.data.FirebaseRepository
+import com.amishsxt.drawcast.data.FirebaseRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

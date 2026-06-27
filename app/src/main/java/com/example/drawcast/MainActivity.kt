@@ -1,4 +1,4 @@
-package com.example.drawcast
+package com.amishsxt.drawcast
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,8 +8,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.compose.AppTheme
-import com.example.drawcast.screens.MainScreen
-import com.example.drawcast.screens.SplashScreen
+import com.amishsxt.drawcast.screens.MainScreen
+import com.amishsxt.drawcast.screens.SplashScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

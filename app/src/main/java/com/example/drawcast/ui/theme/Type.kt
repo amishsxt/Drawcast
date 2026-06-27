@@ -8,7 +8,7 @@ import androidx.compose.ui.unit.sp
 
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.googlefonts.Font
-import com.example.drawcast.R
+import com.amishsxt.drawcast.R
 
 val provider = GoogleFont.Provider(
     providerAuthority = "com.google.android.gms.fonts",

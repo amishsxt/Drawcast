@@ -1,4 +1,4 @@
-package com.example.drawcast.webrtc
+package com.amishsxt.drawcast.webrtc
 
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -1,4 +1,4 @@
-package com.example.drawcast.ui.home
+package com.amishsxt.drawcast.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
