@@ -2,6 +2,7 @@ package com.amishsxt.drawcast.ui.call
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import com.amishsxt.drawcast.core.AppLogger
 import androidx.lifecycle.viewModelScope
 import com.amishsxt.drawcast.annotation.models.Annotation
 import com.amishsxt.drawcast.webrtc.IceCandidateModel
@@ -13,6 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class CallViewModel : ViewModel() {
+
+    companion object {
+        private const val TAG = "CallViewModel"
+    }
 
     private lateinit var webRTCManager: WebRTCManager
     private val signalingRepository = SignalingRepository()
@@ -26,6 +31,7 @@ class CallViewModel : ViewModel() {
     val connectionState get() = webRTCManager.connectionState
 
     fun init(context: Context, roomId: String, isExpert: Boolean) {
+        AppLogger.i(TAG, "init roomId=$roomId isExpert=$isExpert")
         webRTCManager = WebRTCManager(context)
         webRTCManager.initPeerConnection()
 
@@ -45,6 +51,7 @@ class CallViewModel : ViewModel() {
     // ── Expert (Phone A) ──────────────────────────────────────────────────
     // Creates room → sends offer → waits for answer → streams remote ICE
     private fun startAsExpert(roomId: String) {
+        AppLogger.i(TAG, "startAsExpert roomId=$roomId")
         signalingRepository.createRoom(roomId)
 
         webRTCManager.createOffer { sdp ->
@@ -64,6 +71,7 @@ class CallViewModel : ViewModel() {
     // ── Field User (Phone B) ──────────────────────────────────────────────
     // Waits for offer → sends answer → starts camera → streams remote ICE
     private fun startAsFieldUser(roomId: String) {
+        AppLogger.i(TAG, "startAsFieldUser roomId=$roomId")
         viewModelScope.launch {
             signalingRepository.observeOffer(roomId).collect { sdp ->
                 webRTCManager.createAnswer(sdp) { answer ->

@@ -1,6 +1,7 @@
 package com.amishsxt.drawcast.webrtc
 
 import android.content.Context
+import com.amishsxt.drawcast.core.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,10 @@ import org.webrtc.SessionDescription
 import java.nio.ByteBuffer
 
 class WebRTCManager(private val context: Context) {
+
+    companion object {
+        private const val TAG = "WebRTCManager"
+    }
 
     private val _connectionState = MutableStateFlow(ConnectionState.IDLE)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -40,6 +45,7 @@ class WebRTCManager(private val context: Context) {
     )
 
     fun initPeerConnection() {
+        AppLogger.d(TAG, "initPeerConnection")
         PeerConnectionFactory.initialize(
             PeerConnectionFactory.InitializationOptions
                 .builder(context.applicationContext)
@@ -67,6 +73,7 @@ class WebRTCManager(private val context: Context) {
         override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
 
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
+            AppLogger.d(TAG, "onIceConnectionChange: $state")
             _connectionState.value = when (state) {
                 PeerConnection.IceConnectionState.CONNECTED,
                 PeerConnection.IceConnectionState.COMPLETED -> ConnectionState.CONNECTED
@@ -81,6 +88,7 @@ class WebRTCManager(private val context: Context) {
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
 
         override fun onIceCandidate(candidate: IceCandidate?) {
+            AppLogger.d(TAG, "onIceCandidate: ${candidate?.sdpMid}")
             candidate?.let {
                 onIceCandidate?.invoke(
                     IceCandidateModel(it.sdp, it.sdpMid, it.sdpMLineIndex)
@@ -93,7 +101,7 @@ class WebRTCManager(private val context: Context) {
         override fun onRemoveStream(stream: MediaStream?) {}
 
         override fun onDataChannel(channel: DataChannel?) {
-            // Field User receives the data channel here
+            AppLogger.d(TAG, "onDataChannel received: ${channel?.label()}")
             channel?.let {
                 dataChannel = it
                 observeDataChannel(it)
@@ -109,6 +117,7 @@ class WebRTCManager(private val context: Context) {
             override fun onBufferedAmountChange(amount: Long) {}
             override fun onStateChange() {}
             override fun onMessage(buffer: DataChannel.Buffer?) {
+                AppLogger.v(TAG, "dataChannel onMessage received")
                 buffer?.let {
                     val bytes = ByteArray(it.data.remaining())
                     it.data.get(bytes)
@@ -121,6 +130,7 @@ class WebRTCManager(private val context: Context) {
     }
 
     fun createOffer(onSuccess: (sdp: String) -> Unit) {
+        AppLogger.i(TAG, "createOffer")
         _connectionState.value = ConnectionState.CONNECTING
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
@@ -129,26 +139,29 @@ class WebRTCManager(private val context: Context) {
         peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(sdp: SessionDescription?) {
                 sdp ?: return
+                AppLogger.d(TAG, "offer created")
                 peerConnection?.setLocalDescription(simpleSdpObserver { onSuccess(sdp.description) }, sdp)
             }
             override fun onSetSuccess() {}
-            override fun onCreateFailure(error: String?) {}
-            override fun onSetFailure(error: String?) {}
+            override fun onCreateFailure(error: String?) { AppLogger.e(TAG, "createOffer failed: $error") }
+            override fun onSetFailure(error: String?) { AppLogger.e(TAG, "setLocalDescription failed: $error") }
         }, constraints)
     }
 
     fun createAnswer(remoteSdp: String, onSuccess: (sdp: String) -> Unit) {
+        AppLogger.i(TAG, "createAnswer")
         val offer = SessionDescription(SessionDescription.Type.OFFER, remoteSdp)
         peerConnection?.setRemoteDescription(simpleSdpObserver {
             val constraints = MediaConstraints()
             peerConnection?.createAnswer(object : SdpObserver {
                 override fun onCreateSuccess(sdp: SessionDescription?) {
                     sdp ?: return
+                    AppLogger.d(TAG, "answer created")
                     peerConnection?.setLocalDescription(simpleSdpObserver { onSuccess(sdp.description) }, sdp)
                 }
                 override fun onSetSuccess() {}
-                override fun onCreateFailure(error: String?) {}
-                override fun onSetFailure(error: String?) {}
+                override fun onCreateFailure(error: String?) { AppLogger.e(TAG, "createAnswer failed: $error") }
+                override fun onSetFailure(error: String?) { AppLogger.e(TAG, "setLocalDescription failed: $error") }
             }, constraints)
         }, offer)
     }
@@ -165,6 +178,7 @@ class WebRTCManager(private val context: Context) {
     }
 
     fun sendMessage(message: String) {
+        AppLogger.d(TAG, "sendMessage: $message")
         val buffer = DataChannel.Buffer(
             ByteBuffer.wrap(message.toByteArray(Charsets.UTF_8)),
             false
@@ -177,6 +191,7 @@ class WebRTCManager(private val context: Context) {
     }
 
     fun release() {
+        AppLogger.i(TAG, "release")
         dataChannel?.close()
         peerConnection?.close()
         if (::peerConnectionFactory.isInitialized) peerConnectionFactory.dispose()

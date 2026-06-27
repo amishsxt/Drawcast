@@ -1,5 +1,6 @@
 package com.amishsxt.drawcast.webrtc
 
+import com.amishsxt.drawcast.core.AppLogger
 import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -11,21 +12,29 @@ import kotlinx.coroutines.flow.callbackFlow
 
 class SignalingRepository {
 
+    companion object {
+        private const val TAG = "SignalingRepository"
+    }
+
     private val db = FirebaseDatabase.getInstance().reference.child("rooms")
 
     fun createRoom(roomId: String) {
+        AppLogger.i(TAG, "createRoom: $roomId")
         db.child(roomId).child("created").setValue(true)
     }
 
     fun sendOffer(roomId: String, sdp: String) {
+        AppLogger.i(TAG, "sendOffer roomId=$roomId")
         db.child(roomId).child("offer").setValue(mapOf("sdp" to sdp))
     }
 
     fun sendAnswer(roomId: String, sdp: String) {
+        AppLogger.i(TAG, "sendAnswer roomId=$roomId")
         db.child(roomId).child("answer").setValue(mapOf("sdp" to sdp))
     }
 
     fun sendIceCandidate(roomId: String, isOffer: Boolean, model: IceCandidateModel) {
+        AppLogger.d(TAG, "sendIceCandidate roomId=$roomId isOffer=$isOffer")
         val key = if (isOffer) "offerCandidates" else "answerCandidates"
         db.child(roomId).child(key).push().setValue(model)
     }
@@ -36,7 +45,10 @@ class SignalingRepository {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val sdp = snapshot.child("sdp").getValue(String::class.java)
-                if (sdp != null) trySend(sdp)
+                if (sdp != null) {
+                    AppLogger.i(TAG, "offer received roomId=$roomId")
+                    trySend(sdp)
+                }
             }
             override fun onCancelled(error: DatabaseError) { close(error.toException()) }
         }
@@ -50,7 +62,10 @@ class SignalingRepository {
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val sdp = snapshot.child("sdp").getValue(String::class.java)
-                if (sdp != null) trySend(sdp)
+                if (sdp != null) {
+                    AppLogger.i(TAG, "answer received roomId=$roomId")
+                    trySend(sdp)
+                }
             }
             override fun onCancelled(error: DatabaseError) { close(error.toException()) }
         }
@@ -65,7 +80,10 @@ class SignalingRepository {
         val listener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 val model = snapshot.getValue(IceCandidateModel::class.java)
-                if (model != null) trySend(model)
+                if (model != null) {
+                    AppLogger.d(TAG, "ICE candidate received mid=${model.sdpMid}")
+                    trySend(model)
+                }
             }
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onChildRemoved(snapshot: DataSnapshot) {}

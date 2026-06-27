@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 class AnnotationViewModel : ViewModel() {
 
+    companion object {
+        private const val TAG = "AnnotationViewModel"
+    }
+
     private val _annotations = MutableStateFlow<List<Annotation>>(emptyList())
     val annotations: StateFlow<List<Annotation>> = _annotations.asStateFlow()
 

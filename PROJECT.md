@@ -33,6 +33,17 @@ Show Annotations ◄─ WebRTC Data Channel ─ Draw Annotations
 
 ---
 
+## 🧰 Core Utilities
+
+| File | Purpose |
+|---|---|
+| `core/Config.kt` | Environment switch (`DEV`/`PROD`). Set `environment = Environment.PROD` before release |
+| `core/AppLogger.kt` | Wrapper around `android.util.Log`. All 5 levels (`v/d/i/w/e`) + optional `Throwable`. Logs are silenced automatically in `PROD` via `Config.isLogEnabled` |
+
+**Convention:** every class has `private const val TAG = "ClassName"` and uses `AppLogger.x(TAG, "message")`.
+
+---
+
 ## 📁 Project Structure
 
 ```

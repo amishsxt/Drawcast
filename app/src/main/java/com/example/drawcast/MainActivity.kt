@@ -13,15 +13,21 @@ import com.amishsxt.drawcast.navigation.DrawcastNavHost
 import com.amishsxt.drawcast.screens.SplashScreen
 import com.amishsxt.drawcast.ui.settings.AppThemeState
 import com.amishsxt.drawcast.ui.settings.ThemeMode
+import com.amishsxt.drawcast.core.AppLogger
 import com.example.compose.AppTheme
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "MainActivity"
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         // Restore saved theme before splash so the correct color shows
         val prefs = getSharedPreferences("drawcast_prefs", MODE_PRIVATE)
         val saved = prefs.getString("theme_mode", ThemeMode.DEFAULT.name)
         AppThemeState.themeMode = ThemeMode.entries.firstOrNull { it.name == saved } ?: ThemeMode.DEFAULT
 
+        AppLogger.d(TAG, "onCreate")
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

@@ -1,12 +1,17 @@
 package com.amishsxt.drawcast.ui.home
 
 import androidx.lifecycle.ViewModel
+import com.amishsxt.drawcast.core.AppLogger
 import com.amishsxt.drawcast.data.FirebaseRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class HomeViewModel : ViewModel() {
+
+    companion object {
+        private const val TAG = "HomeViewModel"
+    }
 
     private val firebaseRepository = FirebaseRepository()
 
@@ -15,11 +20,13 @@ class HomeViewModel : ViewModel() {
 
     fun createRoom() {
         val roomId = firebaseRepository.generateRoomId()
+        AppLogger.i(TAG, "createRoom roomId=$roomId")
         _uiState.value = HomeUiState.RoomCreated(roomId)
         // TODO: write room to Firebase, then navigate to call screen as Expert
     }
 
     fun joinRoom(roomId: String) {
+        AppLogger.i(TAG, "joinRoom roomId=$roomId")
         firebaseRepository.roomExists(roomId) { exists ->
             if (exists) {
                 _uiState.value = HomeUiState.RoomJoined(roomId)
