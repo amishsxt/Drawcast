@@ -5,6 +5,9 @@ import com.amishsxt.drawcast.core.AppLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.webrtc.Camera2Capturer
+import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
@@ -17,6 +20,9 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.SurfaceTextureHelper
+import org.webrtc.VideoSource
+import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
 
 class WebRTCManager(private val context: Context) {
@@ -39,6 +45,16 @@ class WebRTCManager(private val context: Context) {
     private lateinit var peerConnectionFactory: PeerConnectionFactory
     private var peerConnection: PeerConnection? = null
     private var dataChannel: DataChannel? = null
+
+    private val _localVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val localVideoTrack: StateFlow<VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val remoteVideoTrack: StateFlow<VideoTrack?> = _remoteVideoTrack.asStateFlow()
+
+    private var videoSource: VideoSource? = null
+    private var surfaceTextureHelper: SurfaceTextureHelper? = null
+    private var capturer: CameraVideoCapturer? = null
 
     private val iceServers = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
@@ -77,8 +93,14 @@ class WebRTCManager(private val context: Context) {
             _connectionState.value = when (state) {
                 PeerConnection.IceConnectionState.CONNECTED,
                 PeerConnection.IceConnectionState.COMPLETED -> ConnectionState.CONNECTED
-                PeerConnection.IceConnectionState.DISCONNECTED -> ConnectionState.DISCONNECTED
-                PeerConnection.IceConnectionState.FAILED -> ConnectionState.FAILED
+                PeerConnection.IceConnectionState.DISCONNECTED -> {
+                    _remoteVideoTrack.value = null
+                    ConnectionState.DISCONNECTED
+                }
+                PeerConnection.IceConnectionState.FAILED -> {
+                    _remoteVideoTrack.value = null
+                    ConnectionState.FAILED
+                }
                 PeerConnection.IceConnectionState.CHECKING -> ConnectionState.CONNECTING
                 else -> _connectionState.value
             }
@@ -109,7 +131,13 @@ class WebRTCManager(private val context: Context) {
         }
 
         override fun onRenegotiationNeeded() {}
-        override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {}
+        override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {
+            AppLogger.d(TAG, "onAddTrack: ${receiver?.track()?.kind()}")
+            val track = receiver?.track()
+            if (track is VideoTrack) {
+                _remoteVideoTrack.value = track
+            }
+        }
     }
 
     private fun observeDataChannel(channel: DataChannel) {
@@ -187,11 +215,33 @@ class WebRTCManager(private val context: Context) {
     }
 
     fun startCamera() {
-        // TODO: Week 2 — capture camera and attach to a VideoTrack
+        AppLogger.i(TAG, "startCamera")
+        val enumerator = Camera2Enumerator(context)
+        val cameraName = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) }
+            ?: enumerator.deviceNames.firstOrNull()
+            ?: run { AppLogger.e(TAG, "No camera found"); return }
+
+        capturer = Camera2Capturer(context, cameraName, null)
+        surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+        videoSource = peerConnectionFactory.createVideoSource(false)
+        capturer!!.initialize(surfaceTextureHelper, context, videoSource!!.capturerObserver)
+        capturer!!.startCapture(1280, 720, 30)
+
+        val localTrack = peerConnectionFactory.createVideoTrack("local_video_track", videoSource)
+        _localVideoTrack.value = localTrack
+        peerConnection?.addTrack(localTrack, listOf("local_stream"))
+        AppLogger.d(TAG, "camera started, local track added to peer connection")
     }
 
     fun release() {
         AppLogger.i(TAG, "release")
+        capturer?.stopCapture()
+        capturer?.dispose()
+        surfaceTextureHelper?.dispose()
+        videoSource?.dispose()
+        _localVideoTrack.value?.dispose()
+        _localVideoTrack.value = null
+        _remoteVideoTrack.value = null
         dataChannel?.close()
         peerConnection?.close()
         if (::peerConnectionFactory.isInitialized) peerConnectionFactory.dispose()

@@ -5,16 +5,19 @@
 ## 🏗️ Architecture
 
 ```
-Phone B (Field User)                    Phone A (Expert)
-─────────────────────                   ─────────────────
-Camera Stream ──── WebRTC Video ──────► View Live Feed
-Show Annotations ◄─ WebRTC Data Channel ─ Draw Annotations
+Phone A (Expert)                        Phone B (Field User)
+─────────────────                       ─────────────────────
+Camera Stream ──── WebRTC Video ──────► View Expert Feed
+View Field Feed ◄─ WebRTC Video ─────── Camera Stream
+Draw Annotations ── WebRTC Data ──────► Show Annotations
 
                         │
                     Firebase
                 (Signaling ONLY)
               offer / answer / ICE
 ```
+
+Both devices stream video to each other. Firebase is used only for signaling — video and annotation data flow directly peer-to-peer via WebRTC.
 
 ---
 
@@ -49,7 +52,7 @@ Show Annotations ◄─ WebRTC Data Channel ─ Draw Annotations
 ```
 app/
 ├── webrtc/
-│   ├── WebRTCManager.kt          ← PeerConnection, data channel, ICE
+│   ├── WebRTCManager.kt          ← PeerConnection, data channel, ICE, camera, video tracks
 │   ├── SignalingRepository.kt    ← Firebase offer/answer/ICE flows
 │   └── IceCandidateModel.kt      ← Firebase-serializable ICE data class
 ├── annotation/
@@ -63,8 +66,8 @@ app/
 │   │   ├── HomeScreen.kt         ← Create/Join room UI
 │   │   └── HomeViewModel.kt
 │   └── call/
-│       ├── CallScreen.kt         ← Active session (video + overlay)
-│       └── CallViewModel.kt      ← Orchestrates WebRTC + signaling
+│       ├── CallScreen.kt         ← Active session (video + overlay + toolbar)
+│       └── CallViewModel.kt      ← Orchestrates WebRTC + signaling + video state
 ├── screens/
 │   ├── SplashScreen.kt
 │   ├── MainScreen.kt             ← Bottom nav (Home, History, Profile)
@@ -123,11 +126,20 @@ rooms/
 
 **Signaling flow**
 ```
+Both:       initPeerConnection → startCamera → addTrack (track in SDP)
 Expert:     createRoom → createOffer → sendOffer → observeAnswer
                → setRemoteDescription → observeRemoteICE
-Field User: observeOffer → createAnswer → sendAnswer → startCamera
+Field User: observeOffer → createAnswer → sendAnswer
                → observeRemoteICE
 Both:       onIceCandidate → sendIceCandidate to Firebase
+Both:       onAddTrack → _remoteVideoTrack emitted → UI renders remote video
+```
+
+**Video layout states**
+```
+remoteVideoTrack != null  →  remote video full-screen + local camera PiP (120×160dp, bottom-right)
+remoteVideoTrack == null  →  own camera full-screen, mirrored (waiting for peer)
+ICE DISCONNECTED/FAILED   →  _remoteVideoTrack cleared → "Call ended" overlay shown
 ```
 
 ---
@@ -146,27 +158,38 @@ Both:       onIceCandidate → sendIceCandidate to Firebase
 
 **Week 2 — Video Call ✅**
 - [x] Runtime camera permission request in `CallScreen` / `CallViewModel`
-- [x] Camera capture on Phone B — `startCamera()` in `WebRTCManager` using `Camera2Enumerator`, `VideoSource`, `VideoTrack`
-- [x] Wire `onTrack` in `PeerConnection.Observer` to expose incoming remote `VideoTrack`
-- [x] Remote video rendering on Phone A — `SurfaceViewRenderer` as `AndroidView` in `CallScreen`, initialized with shared `EglBase`
-- [x] Data channel smoke test — send `"ping"`, verify receipt on other device
-- Goal: live video working across different networks via STUN ✅
+- [x] Both devices call `startCamera()` in `CallViewModel.init()` before offer/answer — track must be in SDP at negotiation time
+- [x] `Camera2Enumerator` picks front camera; `Camera2Capturer` + `SurfaceTextureHelper` + `VideoSource` + `VideoTrack` created synchronously; `peerConnection.addTrack()` called before `createOffer()`/`createAnswer()`
+- [x] `onAddTrack` in `PeerConnection.Observer` emits incoming `VideoTrack` to `_remoteVideoTrack` StateFlow
+- [x] `SurfaceViewRenderer` as `AndroidView` in `CallScreen` — initialized with shared `EglBase`, `SCALE_ASPECT_FILL`, hardware scaler enabled
+- [x] Remote video full-screen; local camera mirrored PiP (120×160dp) overlaid bottom-right above toolbar
+- [x] Own camera shown full-screen while waiting for peer to connect
+- [x] ICE `DISCONNECTED`/`FAILED` clears `_remoteVideoTrack` — prevents frozen last frame; "Call ended" card overlay shown
+- [x] Data channel smoke test — `sendMessage` / `onMessage` verified
+- Goal: live two-way video working across different networks via STUN ✅
 
 **Week 2 — Implementation Notes**
-- `EglBase` is shared from `WebRTCManager.eglBase` — never create a second instance or rendering glitches occur
-- Use `onTrack` (Unified Plan), not the deprecated `onAddStream`
-- `SurfaceViewRenderer` must be initialized before the remote track arrives; release in `onDispose`
-- Camera + PeerConnection callbacks run on different threads — use `WebRTCManager`'s existing executor pattern
+- `EglBase` lives in `WebRTCManager`, exposed via `CallViewModel.eglBase` — shared across all `SurfaceViewRenderer` instances; never create a second instance
+- Use `onAddTrack` (Unified Plan), not the deprecated `onAddStream`
+- `AndroidView` `factory` lambda captures the track reference; `onRelease` uses that same reference for `removeSink` + `renderer.release()` — ensures clean teardown on Compose navigation
+- `setScalingType(SCALE_ASPECT_FILL)` required — without it, `SurfaceViewRenderer` shrinks its underlying `SurfaceView` to the video's native resolution, leaving a tiny box in the center
+- `startCamera()` must be called before `createOffer()` / `createAnswer()` so the video transceiver is present in the SDP; both roles call it inside `init()`
+- `_remoteVideoTrack.value = null` on ICE disconnect is the correct freeze fix — Compose removes the `AndroidView`, `onRelease` fires, renderer is released
+
+**Week 2 — CallScreen UI**
+- Top bar: `statusBarsPadding()` fixes overlap with system status bar and allows touch on all buttons
+- Left column: "● Connected" chip + "Room XXXXXX" chip stacked with 6dp spacing
+- Right: wide red pill "End Call" button (`CallEnd` icon + label, `RoundedCornerShape(24.dp)`, 24dp horizontal padding)
+- Bottom toolbar: pencil / arrow / circle tool selector + color dot + undo + clear all
 
 **Week 3 — Annotation Engine**
-- `AnnotationOverlayView` with Canvas
+- `AnnotationOverlayView` with Canvas over the video layer
 - Freehand draw → serialize to JSON → send over data channel → render on other device
-- Add Arrow, Circle, Rectangle tools
-- Undo / Clear All
+- Add Arrow, Circle tools (Rectangle optional)
+- Undo / Clear All (data channel messages, not just local state)
 
 **Week 4 — Polish & Portfolio**
 - Color picker + stroke width
-- 6-digit room code system
 - Error handling + reconnection logic
 - README with architecture diagram
 - 60-second demo video (both phones side by side)
@@ -188,9 +211,9 @@ Real-Time AR Annotation App                         GitHub ↗
 • Built a peer-to-peer AR annotation system for Android using
   WebRTC, enabling remote experts to draw overlays on a live
   camera feed synced across devices in real-time.
-• Implemented WebRTC signaling (offer/answer/ICE) via Firebase
-  and routed annotation data through a dedicated WebRTC data
-  channel, keeping video and annotation pipelines independent.
+• Implemented bidirectional WebRTC video (offer/answer/ICE via
+  Firebase) with Camera2 capture, SurfaceViewRenderer, and a
+  Compose AndroidView lifecycle that handles track teardown cleanly.
 • Built a custom Canvas rendering layer with normalized
   coordinate mapping to support freehand draw, arrows, and
   circles across any screen size.
