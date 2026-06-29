@@ -1,5 +1,9 @@
 package com.amishsxt.drawcast.ui.call
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,22 +16,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,9 +45,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.amishsxt.drawcast.webrtc.WebRTCManager
+import org.webrtc.RendererCommon
+import org.webrtc.SurfaceViewRenderer
 
 private val BgColor = Color(0xFF121212)
 private val ToolbarColor = Color(0xFF1E1E1E)
@@ -54,106 +69,279 @@ fun CallScreen(
     onClose: () -> Unit,
     viewModel: CallViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var selectedTool by remember { mutableStateOf("pencil") }
+    var permissionGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var permissionDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            permissionGranted = true
+        } else {
+            permissionDenied = true
+        }
+    }
+
+    // Request on first entry if not already granted
+    LaunchedEffect(Unit) {
+        if (!permissionGranted) {
+            permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Init WebRTC once permission is confirmed
+    LaunchedEffect(permissionGranted) {
+        if (permissionGranted) {
+            viewModel.init(context, roomId, isExpert)
+        }
+    }
+
+    // Permission denied wall
+    if (permissionDenied) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BgColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = Color(0xFF555555),
+                    modifier = Modifier.size(56.dp)
+                )
+                Text(
+                    text = "Camera permission is required to start a call.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                    Text("Grant Permission")
+                }
+            }
+        }
+        return
+    }
+
+    val remoteVideoTrack by viewModel.remoteVideoTrack.collectAsState()
+    val localVideoTrack by viewModel.localVideoTrack.collectAsState()
+    val connectionState by viewModel.connectionState.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BgColor)
     ) {
-        // ── Center placeholder ────────────────────────────────────────────
-        Column(
-            modifier = Modifier.align(Alignment.Center),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Default.Videocam,
-                contentDescription = null,
-                modifier = Modifier.size(64.dp),
-                tint = Color(0xFF555555)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Live Video Feed",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF64B5F6)
-            )
-            Text(
-                text = "Remote camera stream",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF888888)
-            )
+        // ── Video layer ───────────────────────────────────────────────────
+        val isDisconnected = connectionState == WebRTCManager.ConnectionState.DISCONNECTED
+                || connectionState == WebRTCManager.ConnectionState.FAILED
+
+        when {
+            remoteVideoTrack != null -> {
+                // Remote full screen
+                val remTrack = remoteVideoTrack!!
+                AndroidView(
+                    factory = { ctx ->
+                        SurfaceViewRenderer(ctx).apply {
+                            init(viewModel.eglBase.eglBaseContext, null)
+                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                            setEnableHardwareScaler(true)
+                            remTrack.addSink(this)
+                        }
+                    },
+                    onRelease = { renderer ->
+                        remTrack.removeSink(renderer)
+                        renderer.release()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Local PiP (bottom-right, above toolbar)
+                if (localVideoTrack != null) {
+                    val locTrack = localVideoTrack!!
+                    AndroidView(
+                        factory = { ctx ->
+                            SurfaceViewRenderer(ctx).apply {
+                                init(viewModel.eglBase.eglBaseContext, null)
+                                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                                setEnableHardwareScaler(true)
+                                setMirror(true)
+                                locTrack.addSink(this)
+                            }
+                        },
+                        onRelease = { renderer ->
+                            locTrack.removeSink(renderer)
+                            renderer.release()
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 80.dp, end = 16.dp)
+                            .size(width = 120.dp, height = 160.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                }
+            }
+            localVideoTrack != null -> {
+                // Own camera full screen while waiting for remote to join
+                val locTrack = localVideoTrack!!
+                AndroidView(
+                    factory = { ctx ->
+                        SurfaceViewRenderer(ctx).apply {
+                            init(viewModel.eglBase.eglBaseContext, null)
+                            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+                            setEnableHardwareScaler(true)
+                            setMirror(true)
+                            locTrack.addSink(this)
+                        }
+                    },
+                    onRelease = { renderer ->
+                        locTrack.removeSink(renderer)
+                        renderer.release()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            else -> {
+                // Camera not ready yet
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = Color(0xFF555555)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Starting camera…",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF64B5F6)
+                    )
+                }
+            }
+        }
+
+        // ── Call ended overlay ────────────────────────────────────────────
+        if (isDisconnected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF1E1E1E))
+                        .padding(horizontal = 32.dp, vertical = 24.dp)
+                ) {
+                    Text(
+                        text = "Call ended",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFFEF5350)
+                    )
+                    Text(
+                        text = "The remote user disconnected",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF888888)
+                    )
+                }
+            }
         }
 
         // ── Top bar ───────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .align(Alignment.TopStart),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // X close button
-            Box(
+            // Left: connection status + room code stacked
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Connected status chip
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ChipColor)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(StatusGreen)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Connected",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White
+                    )
+                }
+                // Room code chip
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ChipColor)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Room ",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF888888)
+                    )
+                    Text(
+                        text = roomId,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            // Right: hangup button
+            Row(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(ChipColor)
-                    .clickable { onClose() },
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color(0xFFD32F2F))
+                    .clickable { onClose() }
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
+                    imageVector = Icons.Default.CallEnd,
+                    contentDescription = "End call",
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
                 )
-            }
-
-            // Connected status chip
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(ChipColor)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(StatusGreen)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Connected · 24ms",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "End Call",
+                    style = MaterialTheme.typography.labelLarge,
                     color = Color.White
                 )
             }
-        }
-
-        // ── Room code chip (top left, below X) ───────────────────────────
-        Column(
-            modifier = Modifier
-                .padding(start = 16.dp, top = 72.dp)
-                .align(Alignment.TopStart)
-                .clip(RoundedCornerShape(10.dp))
-                .background(ChipColor)
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = "Room Code",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF888888)
-            )
-            Text(
-                text = roomId,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
         }
 
         // ── Bottom toolbar ────────────────────────────────────────────────

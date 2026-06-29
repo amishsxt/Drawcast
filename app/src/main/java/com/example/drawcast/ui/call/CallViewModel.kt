@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.webrtc.VideoTrack
 
 class CallViewModel : ViewModel() {
 
@@ -28,7 +29,16 @@ class CallViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<CallUiState>(CallUiState.Idle)
     val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
 
-    val connectionState get() = webRTCManager.connectionState
+    private val _localVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val localVideoTrack: StateFlow<VideoTrack?> = _localVideoTrack.asStateFlow()
+
+    private val _remoteVideoTrack = MutableStateFlow<VideoTrack?>(null)
+    val remoteVideoTrack: StateFlow<VideoTrack?> = _remoteVideoTrack.asStateFlow()
+
+    private val _connectionState = MutableStateFlow(WebRTCManager.ConnectionState.IDLE)
+    val connectionState: StateFlow<WebRTCManager.ConnectionState> = _connectionState.asStateFlow()
+
+    val eglBase get() = webRTCManager.eglBase
 
     fun init(context: Context, roomId: String, isExpert: Boolean) {
         AppLogger.i(TAG, "init roomId=$roomId isExpert=$isExpert")
@@ -44,6 +54,19 @@ class CallViewModel : ViewModel() {
         webRTCManager.onDataChannelMessage = { json ->
             // TODO: Week 3 — deserialize JSON → Annotation and add to list
         }
+
+        viewModelScope.launch {
+            webRTCManager.localVideoTrack.collect { _localVideoTrack.value = it }
+        }
+        viewModelScope.launch {
+            webRTCManager.remoteVideoTrack.collect { _remoteVideoTrack.value = it }
+        }
+        viewModelScope.launch {
+            webRTCManager.connectionState.collect { _connectionState.value = it }
+        }
+
+        // Both roles start camera before offer/answer so the video track is in the SDP
+        webRTCManager.startCamera()
 
         if (isExpert) startAsExpert(roomId) else startAsFieldUser(roomId)
     }
@@ -69,7 +92,7 @@ class CallViewModel : ViewModel() {
     }
 
     // ── Field User (Phone B) ──────────────────────────────────────────────
-    // Waits for offer → sends answer → starts camera → streams remote ICE
+    // Waits for offer → sends answer → streams remote ICE
     private fun startAsFieldUser(roomId: String) {
         AppLogger.i(TAG, "startAsFieldUser roomId=$roomId")
         viewModelScope.launch {
@@ -81,7 +104,6 @@ class CallViewModel : ViewModel() {
             }
         }
 
-        webRTCManager.startCamera()
         observeRemoteIceCandidates(roomId, fromOffer = true)
     }
 
